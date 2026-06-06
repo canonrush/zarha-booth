@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="theme-color" content="#1A1A1A">
 <title>ZARHA — AIA 2026 Booth</title>
-<!-- v1.8 — prominent CTA + darker dock zone -->
+<!-- v1.9 — Formspree email backup with offline queue -->
 
 <style>
 :root{
@@ -531,8 +531,8 @@ let thxT=null,thxCdT=null;
 function submitLead(){
   leads.push({id:Date.now()+''+Math.floor(Math.random()*999),ts:new Date().toISOString(),
     role:draft.role,interests:draft.interests.slice(),timeline:draft.timeline,
-    name:draft.name,email:draft.email,company:draft.company,phone:draft.phone,notes:draft.notes,temp:''});
-  saveLeads();disarmIdle();stopFormHero();
+    name:draft.name,email:draft.email,company:draft.company,phone:draft.phone,notes:draft.notes,temp:'',synced:false});
+  saveLeads();syncLeads();disarmIdle();stopFormHero();
   $('thxTitle').textContent='Done!';
   $('thxSub').innerHTML='Thank you, '+esc(draft.name.split(' ')[0])+' &mdash; we’ll be in touch within 48 hours.';
   show('thanks');
@@ -543,6 +543,30 @@ function submitLead(){
 function finishThanks(){clearInterval(thxCdT);clearTimeout(thxT);if($('thanks').classList.contains('on')){show('showcase');startShowcase();}}
 $('doneBtn').onclick=finishThanks;
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+
+/* ================= EMAIL BACKUP (Formspree) ================= */
+const SYNC_URL='https://formspree.io/f/mpqepzll';
+let syncBusy=false;
+function syncLeads(){
+  if(syncBusy||!navigator.onLine)return;
+  const pend=leads.filter(l=>!l.synced);
+  if(!pend.length)return;
+  syncBusy=true;
+  (function next(i){
+    if(i>=pend.length){syncBusy=false;if($('admin').classList.contains('on'))renderAdmin();return;}
+    const l=pend[i];
+    fetch(SYNC_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({_subject:'ZARHA Booth Lead \u2014 '+l.name,name:l.name,email:l.email,
+        company:l.company,phone:l.phone,role:l.role,interests:l.interests.join(', '),
+        timeline:l.timeline,notes:l.notes,captured:l.ts})})
+    .then(r=>{if(r.ok){l.synced=true;saveLeads();next(i+1);}else{syncBusy=false;}})
+    .catch(()=>{syncBusy=false;});
+  })(0);
+}
+window.addEventListener('online',syncLeads);
+setInterval(syncLeads,60000);
+setTimeout(syncLeads,3000);
 
 /* ================= IDLE TIMEOUT ================= */
 let idleT=null,cdT=null,cd=10;
@@ -585,7 +609,7 @@ function renderAdmin(){
     d.innerHTML='<div class="info"><div class="nm">'+esc(ld.name)+(ld.company?' &middot; '+esc(ld.company):'')+'</div>'+
       '<div class="dt">'+esc(ld.role)+' &middot; '+esc(ld.timeline)+'<br>'+esc(ld.interests.join(', '))+'<br>'+
       esc(ld.email)+(ld.phone?' &middot; '+esc(ld.phone):'')+' &middot; '+t.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+
-      (ld.notes?'<br><span style="color:var(--accent)">&ldquo;'+esc(ld.notes)+'&rdquo;</span>':'')+'</div></div>';
+      (ld.notes?'<br><span style="color:var(--accent)">&ldquo;'+esc(ld.notes)+'&rdquo;</span>':'')+(ld.synced?'<br><span style="color:#4a7c59">&#10003; emailed</span>':'<br><span style="color:#b0533a">&bull; email pending</span>')+'</div></div>';
     const tb=document.createElement('div');tb.className='tempBtns';
     [['hot','H'],['warm','W'],['cold','C']].forEach(([k,lab])=>{
       const btn=document.createElement('button');btn.className='tBtn '+k+(ld.temp===k?' on':'');btn.textContent=lab;
